@@ -1,30 +1,30 @@
-class,admissionno.,name
-UKGB,admission no.,Aditi
-UKGB,admission no.,Aksh Lodhi
-UKGB,admission no.,Aniket
-UKGB,admission no.,Apoorva Chauhan
-UKGB,admission no.,Arohi
-UKGB,admission no.,Ayansh
-UKGB,admission no.,Ayush
-UKGB,admission no.,Dev
-UKGB,admission no.,Divyanshi
-UKGB,admission no.,Divyanshi
-UKGB,admission no.,Kraish
-UKGB,admission no.,Manu
-UKGB,admission no.,Nikhat
-UKGB,admission no.,Ojasvi
-UKGB,admission no.,Piyush
-UKGB,admission no.,Raksha
-UKGB,admission no.,Ram Mishra
-UKGB,admission no.,Riddhi
-UKGB,admission no.,Rishi Prajapati
-UKGB,admission no.,Saransh Jain
-UKGB,admission no.,Sarthak
-UKGB,admission no.,Shaswat Shukla
-UKGB,admission no.,Shiddhhi
-UKGB,admission no.,Shiv
-UKGB,admission no.,Srishti
-UKGB,admission no.,Tejashwi Yadav
-UKGB,admission no.,Vaibhav Pratap
-UKGB,admission no.,Vedansh Rajput
-UKGB,admission no.,Vidhi
+class,AdmissionNo.,Name
+UKGB,962,Aditi
+UKGB,1104,Aksh Lodhi
+UKGB,946,Aniket
+UKGB,1105,Apoorva Chauhan
+UKGB,926,Arohi
+UKGB,827,Ayansh
+UKGB,965,Ayush
+UKGB,948,Dev
+UKGB,957,Divyanshi
+UKGB,1047,Divyanshi
+UKGB,1111,Kraish
+UKGB,950,Manu
+UKGB,1053,Nikhat
+UKGB,1100,Ojasvi
+UKGB,953,Piyush
+UKGB,970,Raksha
+UKGB,1038,Ram Mishra
+UKGB,971,Riddhi
+UKGB,1103,Rishi Prajapati
+UKGB,944,Saransh Jain
+UKGB,1054,Sarthak
+UKGB,931,Shaswat Shukla
+UKGB,972,Shiddhhi
+UKGB,955,Shiv
+UKGB,936,Srishti
+UKGB,1107,Tejashwi Yadav
+UKGB,976,Vaibhav Pratap
+UKGB,981,Vedansh Rajput
+UKGB,1108,Vidhi
