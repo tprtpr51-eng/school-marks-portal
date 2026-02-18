@@ -3,76 +3,96 @@ import pandas as pd
 import os
 from datetime import datetime
 
-# --- CONFIGURATION ---
+# --- SETTINGS ---
 EXAMS = ["Unit Test 1", "Midterm", "Unit Test 2", "Final", "Practical"]
-# Updated subject list
 SUBJECTS = ["Math", "Physics", "Chemistry", "Biology", "English", "Hindi", "History", "Geography", "CS"]
 
-st.set_page_config(page_title="Marks Entry Portal", layout="centered")
+st.set_page_config(page_title="Marks Portal", layout="centered")
 
-# --- DATA LOADING WITH SAFETY CHECKS ---
+# --- DATA LOADING ---
 def load_students():
-    if os.path.exists("students.csv"):
-        try:
-            # Load the CSV
-            df = pd.read_csv("students.csv")
-            
-            # SAFETY CLEANING: Remove hidden spaces from column names
-            df.columns = df.columns.str.strip()
-            
-            # ENSURE COLUMNS EXIST (Check for spelling)
-            # This looks for any column containing 'Class', 'Adm', or 'Name'
-            col_map = {}
-            for col in df.columns:
-                if 'class' in col.lower(): col_map['Class'] = col
-                if 'adm' in col.lower(): col_map['AdmissionNo'] = col
-                if 'name' in col.lower(): col_map['Name'] = col
-            
-            # Rename them to our standard names
-            df = df.rename(columns=col_map)
-            return df
-        except Exception as e:
-            st.error(f"Error reading CSV: {e}")
-            return None
-    else:
-        st.error("Missing 'students.csv' file on GitHub!")
+    if not os.path.exists("students.csv"):
+        st.error("Missing 'students.csv' on GitHub!")
+        return None
+    try:
+        df = pd.read_csv("students.csv")
+        df.columns = df.columns.str.strip()
+        # Map columns to standard names
+        mapping = {}
+        for c in df.columns:
+            low_c = c.lower()
+            if 'class' in low_c: mapping['Class'] = c
+            if 'adm' in low_c: mapping['AdmissionNo'] = c
+            if 'name' in low_c: mapping['Name'] = c
+        return df.rename(columns=mapping)
+    except Exception as e:
+        st.error(f"CSV Error: {e}")
         return None
 
 df_students = load_students()
 
-# --- APP UI ---
+# --- UI START ---
 st.title("📝 Student Marks Entry")
 
 if df_students is not None:
-    # Get unique classes from the cleaned 'Class' column
     try:
+        # 1. Top Selectors
         classes = sorted(df_students['Class'].unique())
-        
-        # 1. Selection Header
-        col1, col2, col3 = st.columns(3)
-        sel_class = col1.selectbox("Class", classes)
-        sel_exam = col2.selectbox("Exam", EXAMS)
-        sel_subject = col3.selectbox("Subject", SUBJECTS)
+        c1, c2, c3 = st.columns(3)
+        sel_class = c1.selectbox("Class", classes)
+        sel_exam = c2.selectbox("Exam", EXAMS)
+        sel_subject = c3.selectbox("Subject", SUBJECTS)
 
-        # Filter students for the selected class
+        # Filter students
         class_list = df_students[df_students['Class'] == sel_class]
-
+        
         st.divider()
-        st.subheader(f"{sel_subject} Entry - {sel_class}")
-        st.caption(f"Exam: {sel_exam}")
+        st.subheader(f"{sel_subject} | {sel_class}")
 
         # 2. Entry Form
-        with st.form("marks_entry_form", clear_on_submit=True):
+        with st.form("marks_form", clear_on_submit=True):
             entry_rows = []
             
-            for index, row in class_list.iterrows():
-                # Mobile Layout
-                c1, c2 = st.columns([3, 1])
-                c1.write(f"**{row['Name']}**")
-                c1.caption(f"Adm: {row['AdmissionNo']}")
+            for i, row in class_list.iterrows():
+                col_name, col_input = st.columns([3, 1])
+                col_name.write(f"**{row['Name']}**")
+                col_name.caption(f"Adm: {row['AdmissionNo']}")
                 
-                # 'step=1' forces the numeric keypad on Android
-                mark = c2.number_input("Marks", min_value=0, max_value=100, step=1, key=f"id_{row['AdmissionNo']}", label_visibility="collapsed")
+                # Number input for mobile
+                val = col_input.number_input("Mark", 0, 100, 0, 1, key=f"k_{i}", label_visibility="collapsed")
                 
-                entry_rows.append({
-                    "Timestamp": datetime.now().strftime("%Y-%m-%d
+                # Create the data record
+                record = {
+                    "Time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "Class": sel_class,
+                    "AdmNo": row['AdmissionNo'],
+                    "Name": row['Name'],
+                    "Subject": sel_subject,
+                    "Exam": sel_exam,
+                    "Mark": val
+                }
+                entry_rows.append(record)
+                st.write("---")
+
+            submitted = st.form_submit_button("SUBMIT ALL", use_container_width=True)
+
+        # 3. Save Data
+        if submitted:
+            final_df = pd.DataFrame(entry_rows)
+            fname = "master_marks.csv"
+            if os.path.exists(fname):
+                final_df.to_csv(fname, mode='a', header=False, index=False)
+            else:
+                final_df.to_csv(fname, index=False)
+            st.success("Marks Saved Successfully!")
+            st.balloons()
+
+    except Exception as err:
+        st.error(f"UI Error: {err}")
+        st.write("Current Columns:", list(df_students.columns))
+
+    # 4. Download for Admin
+    if os.path.exists("master_marks.csv"):
+        with st.expander("Admin: Download Data"):
+            db = pd.read_csv("master_marks.csv")
+            st.download_button("Download CSV", db.to_csv(index=False), "marks.csv")
