@@ -16,15 +16,19 @@ def load_students():
         return None
     try:
         df = pd.read_csv("students.csv")
+        # Clean white spaces from headers
         df.columns = df.columns.str.strip()
-        # Map columns to standard names
-        mapping = {}
+        
+        # Mapping logic: Find column regardless of Case or Dots
+        new_cols = {}
         for c in df.columns:
             low_c = c.lower()
-            if 'class' in low_c: mapping['Class'] = c
-            if 'adm' in low_c: mapping['AdmissionNo'] = c
-            if 'name' in low_c: mapping['Name'] = c
-        return df.rename(columns=mapping)
+            if 'class' in low_c: new_cols[c] = 'Class'
+            elif 'adm' in low_c: new_cols[c] = 'AdmissionNo'
+            elif 'name' in low_c: new_cols[c] = 'Name'
+        
+        df = df.rename(columns=new_cols)
+        return df
     except Exception as e:
         st.error(f"CSV Error: {e}")
         return None
@@ -36,60 +40,62 @@ st.title("📝 Student Marks Entry")
 
 if df_students is not None:
     try:
-        # 1. Top Selectors
-        classes = sorted(df_students['Class'].unique())
-        c1, c2, c3 = st.columns(3)
-        sel_class = c1.selectbox("Class", classes)
-        sel_exam = c2.selectbox("Exam", EXAMS)
-        sel_subject = c3.selectbox("Subject", SUBJECTS)
+        # Check if we successfully mapped the columns
+        if 'Class' not in df_students.columns:
+            st.error("Could not find 'Class' column. Please check your CSV headers.")
+            st.write("Found columns:", list(df_students.columns))
+        else:
+            # 1. Top Selectors
+            classes = sorted(df_students['Class'].unique())
+            c1, c2, c3 = st.columns(3)
+            sel_class = c1.selectbox("Class", classes)
+            sel_exam = c2.selectbox("Exam", EXAMS)
+            sel_subject = c3.selectbox("Subject", SUBJECTS)
 
-        # Filter students
-        class_list = df_students[df_students['Class'] == sel_class]
-        
-        st.divider()
-        st.subheader(f"{sel_subject} | {sel_class}")
-
-        # 2. Entry Form
-        with st.form("marks_form", clear_on_submit=True):
-            entry_rows = []
+            # Filter students
+            class_list = df_students[df_students['Class'] == sel_class]
             
-            for i, row in class_list.iterrows():
-                col_name, col_input = st.columns([3, 1])
-                col_name.write(f"**{row['Name']}**")
-                col_name.caption(f"Adm: {row['AdmissionNo']}")
-                
-                # Number input for mobile
-                val = col_input.number_input("Mark", 0, 100, 0, 1, key=f"k_{i}", label_visibility="collapsed")
-                
-                # Create the data record
-                record = {
-                    "Time": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "Class": sel_class,
-                    "AdmNo": row['AdmissionNo'],
-                    "Name": row['Name'],
-                    "Subject": sel_subject,
-                    "Exam": sel_exam,
-                    "Mark": val
-                }
-                entry_rows.append(record)
-                st.write("---")
+            st.divider()
+            st.subheader(f"{sel_subject} | {sel_class}")
 
-            submitted = st.form_submit_button("SUBMIT ALL", use_container_width=True)
+            # 2. Entry Form
+            with st.form("marks_form", clear_on_submit=True):
+                entry_rows = []
+                
+                for i, row in class_list.iterrows():
+                    col_name, col_input = st.columns([3, 1])
+                    col_name.write(f"**{row.get('Name', 'Unknown')}**")
+                    col_name.caption(f"Adm: {row.get('AdmissionNo', 'N/A')}")
+                    
+                    val = col_input.number_input("Mark", 0, 100, 0, 1, key=f"k_{i}", label_visibility="collapsed")
+                    
+                    record = {
+                        "Time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "Class": sel_class,
+                        "AdmNo": row.get('AdmissionNo', 'N/A'),
+                        "Name": row.get('Name', 'Unknown'),
+                        "Subject": sel_subject,
+                        "Exam": sel_exam,
+                        "Mark": val
+                    }
+                    entry_rows.append(record)
+                    st.write("---")
 
-        # 3. Save Data
-        if submitted:
-            final_df = pd.DataFrame(entry_rows)
-            fname = "master_marks.csv"
-            if os.path.exists(fname):
-                final_df.to_csv(fname, mode='a', header=False, index=False)
-            else:
-                final_df.to_csv(fname, index=False)
-            st.success("Marks Saved Successfully!")
-            st.balloons()
+                submitted = st.form_submit_button("SUBMIT ALL", use_container_width=True)
+
+            # 3. Save Data
+            if submitted:
+                final_df = pd.DataFrame(entry_rows)
+                fname = "master_marks.csv"
+                if os.path.exists(fname):
+                    final_df.to_csv(fname, mode='a', header=False, index=False)
+                else:
+                    final_df.to_csv(fname, index=False)
+                st.success("Marks Saved Successfully!")
+                st.balloons()
 
     except Exception as err:
-        st.error(f"UI Error: {err}")
-        st.write("Current Columns:", list(df_students.columns))
+        st.error(f"Internal Error: {err}")
 
     # 4. Download for Admin
     if os.path.exists("master_marks.csv"):
