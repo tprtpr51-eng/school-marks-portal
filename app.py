@@ -43,13 +43,18 @@ def load_and_clean_excel(class_sheet):
         return None
 
 # --- UI CONTROLS ---
-classes = ["CLASS 1st", "CLASS 2nd", "CLASS 3rd", "CLASS 4th", "CLASS 5th", 
-           "CLASS 6th", "CLASS 7th", "CLASS 8th", "CLASS 9th", "CLASS 10th"]
+# Automatically read exact sheet names from the Excel file
+try:
+    xls = pd.ExcelFile(EXCEL_FILE)
+    available_classes = xls.sheet_names 
+except Exception as e:
+    st.error(f"Could not read the Excel file. Make sure 'students.xlsx' is uploaded. Error: {e}")
+    available_classes = []
 
-sel_class = st.selectbox("Select Class Sheet", classes)
-sel_subject = st.selectbox("Subject", ["Hindi", "English", "Math", "Science", "Social", "G.K.", "Computer", "Sanskrit", "Art"])
+if available_classes:
+    sel_class = st.selectbox("Select Class Sheet", available_classes)sel_subject = st.selectbox("Subject", ["Hindi", "English", "Math", "Science", "Social Science","G. K.","Moral","Computer","Sanskrit","Art", "P.T.", "Craft", "Hindi Written", "English Written", "Math Written", "Hindi Oral", "English Oral", "Math Oral"])
 
-exam_mode = st.radio("Entry Type", ["Quarterly (Max 80)", "Test (Max 20)"], horizontal=True)
+exam_mode = st.radio("Entry Type", ["1st Term Test (Max 20)", "Quarterly Examination (Max 80)", "2nd Term Test (Max 20)", "Half Yearly Examination (Max 80)", "3rd Term Test (Max 20)", "Annual Examination (Max 80)"], horizontal=True)
 max_val, pass_val = (80, 27) if "Quarterly" in exam_mode else (20, 7)
 
 df_students = load_and_clean_excel(sel_class)
