@@ -51,8 +51,11 @@ except Exception as e:
     st.error(f"Could not read the Excel file. Make sure 'students.xlsx' is uploaded. Error: {e}")
     available_classes = []
 
+# ✅ THIS IS CORRECT (Separated by a line break)
 if available_classes:
-    sel_class = st.selectbox("Select Class Sheet", available_classes)sel_subject = st.selectbox("Subject", ["Hindi", "English", "Math", "Science", "Social Science","G. K.","Moral","Computer","Sanskrit","Art", "P.T.", "Craft", "Hindi Written", "English Written", "Math Written", "Hindi Oral", "English Oral", "Math Oral"])
+    sel_class = st.selectbox("Select Class Sheet", available_classes)
+    
+    sel_subject = st.selectbox("Subject", ["Hindi", "English", "Math", "Science", "Social Science","G. K.","Moral","Computer","Sanskrit","Art", "P.T.", "Craft", "Hindi Written", "English Written", "Math Written", "Hindi Oral", "English Oral", "Math Oral"])
 
 exam_mode = st.radio("Entry Type", ["1st Term Test (Max 20)", "Quarterly Examination (Max 80)", "2nd Term Test (Max 20)", "Half Yearly Examination (Max 80)", "3rd Term Test (Max 20)", "Annual Examination (Max 80)"], horizontal=True)
 max_val, pass_val = (80, 27) if "Quarterly" in exam_mode else (20, 7)
