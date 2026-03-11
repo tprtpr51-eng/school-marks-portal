@@ -1,104 +1,88 @@
 import streamlit as st
 import pandas as pd
-import os
+import gspread
+from google.oauth2.service_account import Credentials
+import json
 from datetime import datetime
 
-# --- SETTINGS ---
-EXAMS = ["Unit Test 1", "Midterm", "Unit Test 2", "Final", "Practical"]
-SUBJECTS = ["Math", "Physics", "Chemistry", "Biology", "English", "Hindi", "History", "Geography", "CS"]
+# --- CONFIGURATION ---
+EXCEL_FILE = "students.xlsx"
+SHEET_NAME_GS = "School_Marks_Database"
 
-st.set_page_config(page_title="Marks Portal", layout="centered")
-
-# --- DATA LOADING ---
-def load_students():
-    if not os.path.exists("students.csv"):
-        st.error("Missing 'students.csv' on GitHub!")
-        return None
+def get_gsheet_client():
     try:
-        df = pd.read_csv("students.csv")
-        # Clean white spaces from headers
-        df.columns = df.columns.str.strip()
+        service_account_info = json.loads(st.secrets["service_account"])
+        creds = Credentials.from_service_account_info(
+            service_account_info,
+            scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        )
+        return gspread.authorize(creds)
+    except Exception as e:
+        st.error(f"Secret Key Error: {e}")
+        return None
+
+st.set_page_config(page_title="Apex Marks Portal", layout="centered")
+st.title("🏫 Student Marks Entry")
+
+# --- DATA CLEANING ENGINE ---
+@st.cache_data
+def load_and_clean_excel(class_sheet):
+    try:
+        # Load specific sheet (e.g., 'CLASS 8th')
+        df = pd.read_excel(EXCEL_FILE, sheet_name=class_sheet)
         
-        # Mapping logic: Find column regardless of Case or Dots
-        new_cols = {}
-        for c in df.columns:
-            low_c = c.lower()
-            if 'class' in low_c: new_cols[c] = 'Class'
-            elif 'adm' in low_c: new_cols[c] = 'AdmissionNo'
-            elif 'name' in low_c: new_cols[c] = 'Name'
+        # 1. Standardize DOB (Fixes both 07-01 and 07/01)
+        df['date_of_birth'] = pd.to_datetime(df['date_of_birth'], errors='coerce').dt.strftime('%d/%m/%Y')
         
-        df = df.rename(columns=new_cols)
+        # 2. Use first_name as the Full Name (per your instruction)
+        df['display_name'] = df['first_name'].astype(str).str.strip()
+        
         return df
     except Exception as e:
-        st.error(f"CSV Error: {e}")
+        st.error(f"Error loading {class_sheet}: {e}")
         return None
 
-df_students = load_students()
+# --- UI CONTROLS ---
+classes = ["CLASS 1st", "CLASS 2nd", "CLASS 3rd", "CLASS 4th", "CLASS 5th", 
+           "CLASS 6th", "CLASS 7th", "CLASS 8th", "CLASS 9th", "CLASS 10th"]
 
-# --- UI START ---
-st.title("📝 Student Marks Entry")
+sel_class = st.selectbox("Select Class Sheet", classes)
+sel_subject = st.selectbox("Subject", ["Hindi", "English", "Math", "Science", "Social", "G.K.", "Computer", "Sanskrit", "Art"])
+
+exam_mode = st.radio("Entry Type", ["Quarterly (Max 80)", "Test (Max 20)"], horizontal=True)
+max_val, pass_val = (80, 27) if "Quarterly" in exam_mode else (20, 7)
+
+df_students = load_and_clean_excel(sel_class)
 
 if df_students is not None:
-    try:
-        # Check if we successfully mapped the columns
-        if 'Class' not in df_students.columns:
-            st.error("Could not find 'Class' column. Please check your CSV headers.")
-            st.write("Found columns:", list(df_students.columns))
-        else:
-            # 1. Top Selectors
-            classes = sorted(df_students['Class'].unique())
-            c1, c2, c3 = st.columns(3)
-            sel_class = c1.selectbox("Class", classes)
-            sel_exam = c2.selectbox("Exam", EXAMS)
-            sel_subject = c3.selectbox("Subject", SUBJECTS)
-
-            # Filter students
-            class_list = df_students[df_students['Class'] == sel_class]
+    with st.form("entry_form"):
+        batch_data = []
+        for i, row in df_students.iterrows():
+            st.write(f"**{row['display_name']}** (Adm: {row['admission_no']})")
             
+            # Entering only the marks; Status and Note are automated
+            mark = st.number_input(f"Marks", 0, max_val, 0, key=f"m_{i}")
+            
+            # --- THE 4 COLUMNS YOU REQUESTED ---
+            status = 1 if mark >= pass_val else 0
+            note = "Good" if status == 1 else "Fail"
+            
+            batch_data.append([
+                datetime.now().strftime("%Y-%m-%d"),
+                sel_class,
+                sel_subject,
+                exam_mode,
+                row['admission_no'], # Column 1
+                mark,                # Column 2
+                status,              # Column 3
+                note                 # Column 4
+            ])
             st.divider()
-            st.subheader(f"{sel_subject} | {sel_class}")
 
-            # 2. Entry Form
-            with st.form("marks_form", clear_on_submit=True):
-                entry_rows = []
-                
-                for i, row in class_list.iterrows():
-                    col_name, col_input = st.columns([3, 1])
-                    col_name.write(f"**{row.get('Name', 'Unknown')}**")
-                    col_name.caption(f"Adm: {row.get('AdmissionNo', 'N/A')}")
-                    
-                    val = col_input.number_input("Mark", 0, 100, 0, 1, key=f"k_{i}", label_visibility="collapsed")
-                    
-                    record = {
-                        "Time": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        "Class": sel_class,
-                        "AdmNo": row.get('AdmissionNo', 'N/A'),
-                        "Name": row.get('Name', 'Unknown'),
-                        "Subject": sel_subject,
-                        "Exam": sel_exam,
-                        "Mark": val
-                    }
-                    entry_rows.append(record)
-                    st.write("---")
-
-                submitted = st.form_submit_button("SUBMIT ALL", use_container_width=True)
-
-            # 3. Save Data
-            if submitted:
-                final_df = pd.DataFrame(entry_rows)
-                fname = "master_marks.csv"
-                if os.path.exists(fname):
-                    final_df.to_csv(fname, mode='a', header=False, index=False)
-                else:
-                    final_df.to_csv(fname, index=False)
-                st.success("Marks Saved Successfully!")
+        if st.form_submit_button("SAVE ALL TO GOOGLE SHEETS"):
+            client = get_gsheet_client()
+            if client:
+                sheet = client.open(SHEET_NAME_GS).sheet1
+                sheet.append_rows(batch_data)
+                st.success(f"Uploaded {len(batch_data)} records to the cloud!")
                 st.balloons()
-
-    except Exception as err:
-        st.error(f"Internal Error: {err}")
-
-    # 4. Download for Admin
-    if os.path.exists("master_marks.csv"):
-        with st.expander("Admin: Download Data"):
-            db = pd.read_csv("master_marks.csv")
-            st.download_button("Download CSV", db.to_csv(index=False), "marks.csv")
