@@ -94,3 +94,30 @@ if df_students is not None:
                 sheet.append_rows(batch_data)
                 st.success(f"Uploaded {len(batch_data)} records to the cloud!")
                 st.balloons()
+
+# --- EMERGENCY BACKUP SECTION ---
+st.divider()
+st.subheader("💾 Admin Tools")
+
+if st.button("Fetch Database Backup"):
+    client = get_gsheet_client()
+    if client:
+        try:
+            sheet = client.open(SHEET_NAME_GS).sheet1
+            # Get all data from the sheet
+            all_data = sheet.get_all_records()
+            if all_data:
+                # Convert to pandas dataframe
+                df_backup = pd.DataFrame(all_data)
+                
+                # Create the download button
+                st.download_button(
+                    label="📥 Download Full Database as CSV",
+                    data=df_backup.to_csv(index=False).encode('utf-8'),
+                    file_name=f"Apex_Marks_Backup_{datetime.now().strftime('%Y-%m-%d')}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("The database is currently empty.")
+        except Exception as e:
+            st.error(f"Could not fetch backup. Error: {e}")
