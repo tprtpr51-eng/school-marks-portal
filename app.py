@@ -88,36 +88,40 @@ if df_students is not None:
             st.divider()
 
         if st.form_submit_button("SAVE ALL TO GOOGLE SHEETS"):
-            client = get_gsheet_client()
-            if client:
-                sheet = client.open(SHEET_NAME_GS).sheet1
-                sheet.append_rows(batch_data)
-                st.success(f"Uploaded {len(batch_data)} records to the cloud!")
-                st.balloons()
+                    client = get_gsheet_client()
+                    if client:
+                        sheet = client.open(SHEET_NAME_GS).sheet1
+                        # 1. Save to Google Sheets
+                        sheet.append_rows(batch_data)
+                        
+                        # 2. Trigger Email Backup
+                        with st.spinner("Saving to cloud and sending email backup..."):
+                            email_success = send_email_backup(batch_data, sel_class, sel_subject, exam_mode)
+                        
+                        if email_success:
+                            st.success(f"Uploaded successfully and Email Backup sent! This subject is now locked.")
+                        else:
+                            st.warning(f"Uploaded to Google Sheets, but Email Backup failed to send.")
+                        
+                        # 3. Create Teacher's Instant Excel Receipt
+                        df_receipt = pd.DataFrame(batch_data, columns=['Date', 'Class', 'Subject', 'Exam_Type', 'admission_no', 'marks', 'status', 'note'])
+                        receipt_buffer = io.BytesIO()
+                        with pd.ExcelWriter(receipt_buffer, engine='xlsxwriter') as writer:
+                            df_receipt.to_excel(writer, index=False, sheet_name='Submitted_Marks')
+                        
+                        # Save it to app memory so the button doesn't vanish
+                        st.session_state['receipt_data'] = receipt_buffer.getvalue()
+                        st.session_state['receipt_filename'] = f"{sel_class}_{sel_subject}_Receipt.xlsx"
+                        
+                        st.balloons()
 
-# --- EMERGENCY BACKUP SECTION ---
-st.divider()
-st.subheader("💾 Admin Tools")
-
-if st.button("Fetch Database Backup"):
-    client = get_gsheet_client()
-    if client:
-        try:
-            sheet = client.open(SHEET_NAME_GS).sheet1
-            # Get all data from the sheet
-            all_data = sheet.get_all_records()
-            if all_data:
-                # Convert to pandas dataframe
-                df_backup = pd.DataFrame(all_data)
-                
-                # Create the download button
-                st.download_button(
-                    label="📥 Download Full Database as CSV",
-                    data=df_backup.to_csv(index=False).encode('utf-8'),
-                    file_name=f"Apex_Marks_Backup_{datetime.now().strftime('%Y-%m-%d')}.csv",
-                    mime="text/csv"
-                )
-            else:
-                st.info("The database is currently empty.")
-        except Exception as e:
-            st.error(f"Could not fetch backup. Error: {e}")
+        # --- OUTSIDE THE FORM: Teacher's Download Button ---
+        # This checks if there is a receipt in memory and shows the download button
+        if 'receipt_data' in st.session_state:
+            st.info("👇 Click below to save a copy of the marks you just entered for your own records.")
+            st.download_button(
+                label=f"📥 Download {sel_subject} Receipt",
+                data=st.session_state['receipt_data'],
+                file_name=st.session_state['receipt_filename'],
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
