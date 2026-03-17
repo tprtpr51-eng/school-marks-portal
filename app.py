@@ -69,10 +69,19 @@ def send_email_backup(data, class_name, subject, exam_type):
         receiver = st.secrets["email_receiver"]
         password = st.secrets["email_password"]
 
+        # 1. Load all data
         df_temp = pd.DataFrame(data, columns=['Date', 'Class', 'Subject', 'Exam_Type', 'admission_no', 'marks', 'status', 'note'])
+        
+        # 2. Filter to ONLY the 4 columns you want, in the exact order!
+        df_email = df_temp[['admission_no', 'status', 'marks', 'note']].copy()
+        
+        # 3. Rename 'admission_no' to 'adm_no' to perfectly match your request
+        df_email.rename(columns={'admission_no': 'adm_no'}, inplace=True)
+
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            df_temp.to_excel(writer, index=False, sheet_name='Marks')
+            # We save the cleaned-up df_email here instead of df_temp
+            df_email.to_excel(writer, index=False, sheet_name='Marks')
         
         msg = MIMEMultipart()
         msg['From'] = sender
@@ -110,8 +119,22 @@ if available_classes:
     sel_class = st.selectbox("Select Class", available_classes)
     sel_subject = st.selectbox("Subject", ["Hindi", "English", "Math", "Science", "Social Science","G. K.","Moral","Computer","Sanskrit","Art", "P.T.", "Craft", "Hindi Written", "English Written", "Math Written", "Hindi Oral", "English Oral", "Math Oral"])
     
-    exam_mode = st.radio("Entry Type", ["1st Term Test (Max 20)", "Quarterly Examination (Max 80)", "2nd Term Test (Max 20)", "Half Yearly Examination (Max 80)", "3rd Term Test (Max 20)", "Annual Examination (Max 80)"], horizontal=True)
-    max_val, pass_val = (80, 27) if "Quarterly" in exam_mode else (20, 7)
+   # All 6 exams added here (using selectbox so it doesn't clutter the screen)
+    exam_list = [
+        "1st Term Test (Max 20)", 
+        "Quarterly Examination (Max 80)", 
+        "2nd Term Test (Max 20)", 
+        "Half Yearly Examination (Max 80)", 
+        "3rd Term Test (Max 20)", 
+        "Annual Examination (Max 80)"
+    ]
+    exam_mode = st.selectbox("Exam Type", exam_list)
+    
+    # Automatically sets limits based on the name of the exam!
+    if "Max 80" in exam_mode:
+        max_val, pass_val = 80, 27
+    else:
+        max_val, pass_val = 20, 7
 
     is_locked = check_existing_submission(sel_class, sel_subject, exam_mode)
 
