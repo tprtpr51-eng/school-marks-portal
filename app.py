@@ -148,7 +148,14 @@ if available_classes:
             with st.form("entry_form"):
                 batch_data = []
                 for i, row in df_students.iterrows():
-                    adm_no = row.get('admission_no', f"Temp-{i}") 
+                    # 1. Safely extract the admission number
+                    raw_adm = row.get('admission_no', f"Temp-{i}")
+                    
+                    # 2. Force it into a plain string to strip Numpy formatting
+                    if isinstance(raw_adm, (float, int)):
+                        adm_no = str(int(raw_adm))
+                    else:
+                        adm_no = str(raw_adm).strip()
                     
                     st.write(f"**{row['display_name']}** (Adm: {adm_no})")
                     mark = st.number_input(f"Marks", 0, max_val, 0, key=f"m_{i}")
@@ -156,15 +163,16 @@ if available_classes:
                     status = 1 if mark >= pass_val else 0
                     note = "Good" if status == 1 else "Fail"
                     
+                    # 3. Force EVERY single item into a plain Python type (This prevents the JSON Error!)
                     batch_data.append([
-                        datetime.now().strftime("%Y-%m-%d"),
-                        sel_class,
-                        sel_subject,
-                        exam_mode,
-                        adm_no, 
-                        mark,   
-                        status, 
-                        note    
+                        str(datetime.now().strftime("%Y-%m-%d")),
+                        str(sel_class),
+                        str(sel_subject),
+                        str(exam_mode),
+                        str(adm_no), 
+                        int(mark),   
+                        int(status), 
+                        str(note)    
                     ])
                     st.divider()
 
