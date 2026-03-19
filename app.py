@@ -12,7 +12,7 @@ import io
 
 # --- CONFIGURATION ---
 EXCEL_FILE = "students.xlsx"
-SHEET_ID = "12m5GDAKoWeVd58UI-Ho4jM_HRUYkS9PDP3ekBsc1_ls"  # <-- Paste your ID right here!
+SHEET_ID = "12m5GDAKoWeVd58UI-Ho4jM_HRUYkS9PDP3ekBsc1_ls"
 
 def get_gsheet_client():
     try:
@@ -26,12 +26,10 @@ def get_gsheet_client():
         st.error(f"Secret Key Error: {e}")
         return None
 
-# --- LOCKOUT CHECKER ---
 def check_existing_submission(target_class, target_subject, target_exam):
     client = get_gsheet_client()
     if not client: return False
     try:
-        # Using open_by_key to bypass Google Drive API search errors!
         sheet = client.open_by_key(SHEET_ID).sheet1
         records = sheet.get_all_records()
         if not records: return False
@@ -40,13 +38,15 @@ def check_existing_submission(target_class, target_subject, target_exam):
             if str(row.get('Class')) == target_class and str(row.get('Subject')) == target_subject and str(row.get('Exam_Type')) == target_exam:
                 return True
         return False
-    except Exception as e:
+    except Exception:
         return False
 
 @st.cache_data
 def load_and_clean_excel(class_sheet):
     try:
         df = pd.read_excel(EXCEL_FILE, sheet_name=class_sheet)
+        # 1. Drop rows that are completely empty (prevents ghost rows)
+        df = df.dropna(how='all')
         df.columns = df.columns.str.strip().str.lower()
         
         if 'date_of_birth' in df.columns:
@@ -62,25 +62,18 @@ def load_and_clean_excel(class_sheet):
         st.error(f"Error loading {class_sheet}: {e}")
         return None
 
-# --- EMAIL BACKUP ENGINE ---
 def send_email_backup(data, class_name, subject, exam_type):
     try:
         sender = st.secrets["email_sender"]
         receiver = st.secrets["email_receiver"]
         password = st.secrets["email_password"]
 
-        # 1. Load all data
         df_temp = pd.DataFrame(data, columns=['Date', 'Class', 'Subject', 'Exam_Type', 'admission_no', 'marks', 'status', 'note'])
-        
-        # 2. Filter to ONLY the 4 columns you want, in the exact order!
         df_email = df_temp[['admission_no', 'status', 'marks', 'note']].copy()
-        
-        # 3. Rename 'admission_no' to 'adm_no' to perfectly match your request
         df_email.rename(columns={'admission_no': 'adm_no'}, inplace=True)
 
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            # We save the cleaned-up df_email here instead of df_temp
             df_email.to_excel(writer, index=False, sheet_name='Marks')
         
         msg = MIMEMultipart()
@@ -106,7 +99,7 @@ def send_email_backup(data, class_name, subject, exam_type):
 
 # --- UI CONTROLS ---
 st.set_page_config(page_title="Apex Marks Portal", layout="centered")
-st.title("🏫 Student Marks Entry")
+st.title("📝 Student Marks Entry")
 
 try:
     xls = pd.ExcelFile(EXCEL_FILE)
@@ -119,18 +112,13 @@ if available_classes:
     sel_class = st.selectbox("Select Class", available_classes)
     sel_subject = st.selectbox("Subject", ["Hindi", "English", "Math", "Science", "Social Science","G. K.","Moral","Computer","Sanskrit","Art", "P.T.", "Craft", "Hindi Written", "English Written", "Math Written", "Hindi Oral", "English Oral", "Math Oral"])
     
-   # All 6 exams added here (using selectbox so it doesn't clutter the screen)
     exam_list = [
-        "1st Term Test (Max 20)", 
-        "Quarterly Examination (Max 80)", 
-        "2nd Term Test (Max 20)", 
-        "Half Yearly Examination (Max 80)", 
-        "3rd Term Test (Max 20)", 
-        "Annual Examination (Max 80)"
+        "1st Term Test (Max 20)", "Quarterly Examination (Max 80)", 
+        "2nd Term Test (Max 20)", "Half Yearly Examination (Max 80)", 
+        "3rd Term Test (Max 20)", "Annual Examination (Max 80)"
     ]
     exam_mode = st.selectbox("Exam Type", exam_list)
     
-    # Automatically sets limits based on the name of the exam!
     if "Max 80" in exam_mode:
         max_val, pass_val = 80, 27
     else:
@@ -139,16 +127,18 @@ if available_classes:
     is_locked = check_existing_submission(sel_class, sel_subject, exam_mode)
 
     if is_locked:
-        st.error(f"🚨 STOP! Marks for **{sel_class} - {sel_subject} ({exam_mode})** have already been submitted.")
-        st.info("If you need to make corrections, please contact the Admin to delete the old record first.")
+        st.error(f"🛑 STOP! Marks for **{sel_class} - {sel_subject} ({exam_mode})** have already been submitted.")
     else:
         df_students = load_and_clean_excel(sel_class)
         
         if df_students is not None:
             with st.form("entry_form"):
-                batch_data = []
+                raw_inputs = []
                 for i, row in df_students.iterrows():
-                    adm_no = row.get('admission_no', f"Temp-{i}") 
+                    # Handle missing admission numbers during loop
+                    adm_no = row.get('admission_no', "") 
+                    if pd.isna(adm_no) or str(adm_no).strip() == "":
+                        adm_no = f"MISSING_{i}"
                     
                     st.write(f"**{row['display_name']}** (Adm: {adm_no})")
                     mark = st.number_input(f"Marks", 0, max_val, 0, key=f"m_{i}")
@@ -156,47 +146,47 @@ if available_classes:
                     status = 1 if mark >= pass_val else 0
                     note = "Good" if status == 1 else "Fail"
                     
-                    batch_data.append([
+                    raw_inputs.append([
                         datetime.now().strftime("%Y-%m-%d"),
-                        sel_class,
-                        sel_subject,
-                        exam_mode,
-                        adm_no, 
-                        mark,   
-                        status, 
-                        note    
+                        sel_class, sel_subject, exam_mode,
+                        adm_no, mark, status, note    
                     ])
                     st.divider()
 
                 if st.form_submit_button("SAVE ALL TO GOOGLE SHEETS"):
                     client = get_gsheet_client()
                     if client:
-                        # Save using the specific Sheet ID
-                        sheet = client.open_by_key(SHEET_ID).sheet1
-                        sheet.append_rows(batch_data)
+                        # --- THE DATA CLEANING STATION (Fixes JSON Error) ---
+                        df_upload = pd.DataFrame(raw_inputs)
+                        # Replace NaN with empty string and force everything to string
+                        df_upload = df_upload.fillna("").astype(str)
+                        clean_batch_data = df_upload.values.tolist()
                         
-                        with st.spinner("Saving to cloud and sending email backup..."):
-                            email_success = send_email_backup(batch_data, sel_class, sel_subject, exam_mode)
-                        
-                        if email_success:
-                            st.success(f"Uploaded successfully and Email Backup sent!")
-                        else:
-                            st.warning(f"Uploaded to Google Sheets, but Email Backup failed.")
-                        
-                        # Create Teacher's Instant Excel Receipt
-                        df_receipt = pd.DataFrame(batch_data, columns=['Date', 'Class', 'Subject', 'Exam_Type', 'admission_no', 'marks', 'status', 'note'])
-                        receipt_buffer = io.BytesIO()
-                        with pd.ExcelWriter(receipt_buffer, engine='xlsxwriter') as writer:
-                            df_receipt.to_excel(writer, index=False, sheet_name='Submitted_Marks')
-                        
-                        st.session_state['receipt_data'] = receipt_buffer.getvalue()
-                        st.session_state['receipt_filename'] = f"{sel_class}_{sel_subject}_Receipt.xlsx"
-                        
-                        st.balloons()
+                        try:
+                            sheet = client.open_by_key(SHEET_ID).sheet1
+                            sheet.append_rows(clean_batch_data)
+                            
+                            with st.spinner("Saving and sending email..."):
+                                email_success = send_email_backup(raw_inputs, sel_class, sel_subject, exam_mode)
+                            
+                            if email_success:
+                                st.success("Uploaded successfully and Email Backup sent!")
+                            else:
+                                st.warning("Uploaded, but Email Backup failed.")
+                            
+                            # Create Receipt
+                            df_receipt = pd.DataFrame(raw_inputs, columns=['Date', 'Class', 'Subject', 'Exam_Type', 'admission_no', 'marks', 'status', 'note'])
+                            receipt_buffer = io.BytesIO()
+                            with pd.ExcelWriter(receipt_buffer, engine='xlsxwriter') as writer:
+                                df_receipt.to_excel(writer, index=False, sheet_name='Submitted_Marks')
+                            
+                            st.session_state['receipt_data'] = receipt_buffer.getvalue()
+                            st.session_state['receipt_filename'] = f"{sel_class}_{sel_subject}_Receipt.xlsx"
+                            st.balloons()
+                        except Exception as e:
+                            st.error(f"Google Upload Failed: {e}")
 
-        # Teacher's Download Button
         if 'receipt_data' in st.session_state:
-            st.info("👇 Click below to save a copy of the marks you just entered.")
             st.download_button(
                 label=f"📥 Download {sel_subject} Receipt",
                 data=st.session_state['receipt_data'],
@@ -204,15 +194,12 @@ if available_classes:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-# --- EMERGENCY BACKUP & ADMIN TOOLS ---
 st.divider()
-st.subheader("💾 Admin Backup")
-st.write("Use this button to download the entire Google Sheet database directly to your device.")
-
+st.subheader("📁 Admin Tools")
 if st.button("Fetch Entire Database"):
     client = get_gsheet_client()
     if client:
-        with st.spinner("Fetching data from Google Sheets..."):
+        with st.spinner("Fetching data..."):
             try:
                 sheet = client.open_by_key(SHEET_ID).sheet1
                 all_data = sheet.get_all_records()
@@ -221,14 +208,10 @@ if st.button("Fetch Entire Database"):
                     buffer = io.BytesIO()
                     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
                         df_backup.to_excel(writer, index=False, sheet_name='All_Marks')
-                    
-                    st.download_button(
-                        label="📥 Click to Download Full Database Excel File",
-                        data=buffer.getvalue(),
-                        file_name=f"Apex_Marks_Database_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                    st.download_button(label="Download Full Database", data=buffer.getvalue(), 
+                                     file_name=f"Database_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 else:
-                    st.info("The database is currently empty.")
+                    st.info("Database is empty.")
             except Exception as e:
-                st.error(f"Could not fetch backup. Error: {e}")
+                st.error(f"Fetch failed: {e}")
